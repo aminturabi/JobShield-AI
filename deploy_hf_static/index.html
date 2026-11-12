@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JobShield AI - Fake Job Posting Detector</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;max-width:820px;margin:24px auto;padding:0 16px;color:#1a1a1a}
+textarea{width:100%;min-height:220px;padding:12px;font-size:15px;box-sizing:border-box}
+button{padding:10px 18px;font-size:15px;cursor:pointer;margin:6px 4px 6px 0}
+button:disabled{opacity:.5;cursor:wait}
+.bar{height:22px;background:#eee;border-radius:6px;overflow:hidden}
+.fill{height:100%}
+.flag{background:#fff3f3;border:1px solid #e5b4b4;border-radius:6px;padding:8px 12px;margin:8px 0}
+.small{color:#555;font-size:13px}
+</style></head><body>
+<h1>🛡️ JobShield AI</h1>
+<p>Paste a job posting. Get an ML fraud-risk score <b>plus</b> the specific red flags found in the text.</p>
+<p class="small" id="status">Loading model…</p>
+<textarea id="txt" placeholder="Paste the full job posting here..."></textarea><br>
+<button id="checkBtn" onclick="run()" disabled>Check this posting</button>
+<button onclick="loadSample('samples/scammy.txt')">Load scam example</button>
+<button onclick="loadSample('samples/legit.txt')">Load legit example</button>
+<div id="out"></div>
+<p class="small">Trained on the real EMSCAD dataset (17,880 postings, 4.84% fraud): held-out fraud F1 0.8133, PR-AUC 0.9297. The model runs entirely in your browser. JobShield gives a risk signal, not proof. Never pay a fee to get a job, and always verify the employer on its official website.</p>
+<script src="jobshield.js"></script>
+<script>
+let MODEL = null;
+fetch('model.json').then(r => r.json()).then(m => {
+  MODEL = m;
+  document.getElementById('status').textContent = 'Model loaded (' + m.terms.length.toLocaleString() + ' features) - runs 100% in your browser, nothing is uploaded.';
+  document.getElementById('checkBtn').disabled = false;
+}).catch(e => {
+  document.getElementById('status').textContent = 'Failed to load model: ' + e;
+});
+async function loadSample(path){
+  const r = await fetch(path);
+  document.getElementById('txt').value = (await r.text()).trim();
+}
+function esc(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function run(){
+  const text = document.getElementById('txt').value;
+  const out = document.getElementById('out');
+  if(!text.trim() || text.trim().split(/\s+/).length < 5){
+    out.innerHTML = '<p style="color:red">Paste the full job posting first (at least a few sentences).</p>'; return;
+  }
+  const prob = predictML(text, MODEL);
+  const pct = (prob * 100).toFixed(1);
+  const level = riskLevel(prob);
+  const verdict = level === 'high'
+    ? 'Likely fraudulent - do not pay anything or share personal documents.'
+    : level === 'medium'
+      ? 'Suspicious - verify the company through its official website before applying.'
+      : 'Looks like a normal posting on the ML model - still verify the employer independently.';
+  const flags = detectRedFlags(text);
+  const color = level === 'high' ? '#c0392b' : level === 'medium' ? '#e67e22' : '#27ae60';
+  let h = '<h2>Fraud risk: ' + pct + '% (' + level.toUpperCase() + ')</h2>';
+  h += '<div class="bar"><div class="fill" style="width:' + pct + '%;background:' + color + '"></div></div>';
+  h += '<p>' + verdict + '</p>';
+  h += '<h3>Red flags found by rule checks (' + flags.length + ')</h3>';
+  if(flags.length === 0){ h += '<p>No rule-based red flags found.</p>'; }
+  flags.forEach(f => { h += '<div class="flag"><b>🚩 ' + esc(f.flag) + '</b><br><span class="small">' + esc(f.evidence) + '</span><br>' + esc(f.why_it_matters) + '</div>'; });
+  h += '<p class="small">Red flags are from a separate transparent rule-based check, not from the ML model. A risk score is a signal, not proof of fraud.</p>';
+  out.innerHTML = h;
+}
+</script></body></html>

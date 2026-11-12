@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+.pytest_cache/
+# 48 MB raw dataset - re-download from the source in README/eval_report instead of committing it
+data/*.csv
